@@ -1,0 +1,337 @@
+---
+title: "DCIR05: Discovering the OkCupid Dataset and Chicago Food Inspection Data"
+author: "Yuda Jiang (yudaj2@illinois.edu)"
+date: "11/19/2019"
+output: 
+  html_document:
+    theme: cosmo
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(tm)
+library(gridExtra)
+library(tm)
+library(kableExtra)
+```
+
+# Analysis 1 - OkCupid Data: Discovering the users 
+
+## Abstract 
+
+OkCupid is a online dating website started from 2007. This dataset consists observations from users of OkCupid from June 2012. This dataset include the basic user information such as sex, age, sex orientation, interests, habits and 10 short essay questions. The original dataset consists 59946 observations and 31 variables. We plan to conduct a series of exploratory data analysis, data visualizations and a text-mining analysis to determine what do people who are single typically do on Friday nights.  
+
+## Introduction 
+
+In this analysis, we want to do exploratory analysis on some of the features including age, sex, sex orientation, smoking and drink habits. There are a large amount of single people aged around 23 to 27. Most of them make around $20,000 per year.
+
+For analyzing the essay questions in the dataset, we are interested to know a couple of questions. 
+What are the 'common' six things single people can't live without? 
+
+Our questions mainly focus on the words in each essay question. In order to answer these questions, we plan to use data visualizations, sub-setting, and text mining techniques. 
+
+## Analysis 
+
+```{r, include=FALSE}
+okcupid = read_csv("https://uofi.box.com/shared/static/oy32nc373w4jqz3kummksnw6wvhfrl7a.csv")
+```
+
+### Data 
+
+```{r}
+single_data = filter(okcupid, status == "single", income != -1)
+```
+
+### Visualization 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# age distribution
+ggplot(single_data, aes(x = age, fill = sex)) + geom_bar() + ggtitle("Age Distribution in Singles")
+# income distribution
+ggplot(single_data, aes(x = income)) + geom_bar(fill = "#FB966E") + ggtitle("Income Distribution in Singles") 
+
+# Drinking Habits
+ggplot(single_data,
+       aes(
+         x = drinks,
+         fill = ifelse(drinks == "socially", "#FB966E", "no")
+       )) +
+  geom_bar(stat = "count") + ggtitle("Drinking Habits") +
+  theme(legend.position = "none", axis.title.y = element_blank())
+
+# Smoking Habits
+ggplot(single_data,
+       aes(
+         x = smokes,
+         fill = ifelse(smokes == "no", "#FB966E", "no")
+       )) +
+  geom_bar(stat = "count") + ggtitle("Smoking Habits") +
+  theme(legend.position = "none", axis.title.y = element_blank())
+# Drugs
+ggplot(single_data, aes(x = drugs)) + geom_bar(fill = "#FB966E") + ggtitle("Smoking Habits")
+
+# sex orientation
+ggplot(single_data,
+       aes(
+         x = orientation,
+         fill = ifelse(orientation == "straight", "#FB966E", "no")
+       )) +
+  geom_bar(stat = "count") + ggtitle("Sex Orientation") +
+  theme(legend.position = "none", axis.title.y = element_blank())
+
+```
+
+```{r include=FALSE}
+set.seed(42)
+text_data = filter(single_data, essay5 != "")
+# We sampled 1000 users questions under the column
+samp <- sample(1:nrow(text_data), 1000)
+text_data$essay5[samp]
+e8 <-
+  data.frame(
+    doc_id = samp,
+    text = text_data$essay5[samp],
+    stringsAsFactors = FALSE
+  )
+corpus <- VCorpus(DataframeSource(e8))
+```
+
+```{r include=FALSE}
+intolower <- function(x){
+y = NA
+try_error = tryCatch(tolower(x), error = function(e) e)
+if (!inherits(try_error, 'error'))
+y = tolower(x)
+return(y)
+}
+clean_corpus <- function(corpus) {
+  corpus <- tm_map(corpus, content_transformer(intolower))
+  corpus <- tm_map(corpus, removeWords, stopwords('english'))
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, stripWhitespace)
+  corpus <- tm_map(corpus, removeNumbers)
+  return(corpus)
+}
+newcorpus <- clean_corpus(corpus)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(wordcloud)
+tdm <- TermDocumentMatrix(newcorpus, control = list(weighting = weightTf))
+tdm_essay5 <- as.matrix(tdm)
+sfq <-
+  data.frame(
+    words = names(sort(rowSums(tdm_essay5), decreasing = TRUE)),
+    freqs = sort(rowSums(tdm_essay5), decreasing = TRUE),
+    row.names = NULL
+  )
+set.seed(42)
+wordcloud(
+  words = sfq$words,
+  freq = sfq$freqs,
+  min.freq = 1,
+  max.words = 200,
+  random.order = FALSE,
+  rot.per = 0.35,
+  colors = brewer.pal(8, "Dark2")
+)
+```
+
+From the wordcloud we generated from text mining, we can see that the things that these groups cannot live without are mostly friends, families, music, food, love, and tech stuff. 
+
+## Conclusion
+
+From the EDA, we can portrait the group image a little bit, most users who are single make about $20,000 a year although some of them prefer not to disclose their salaries. Moreover, they are mostly aged from 23 to 27. They are social drinkers and most of them don't smoke or do drugs. However, we are unable to know if the users can lie on their profiles. 
+
+From the text analysis we did on one of the essay questions, we found the most important things in their lives are family, friends, love, music, food, and technology products. 
+
+There are some limitations of this analysis. First, we are unable to process text analysis using a large dataset. Second, some users refuse to disclose their income, making the income distribution a little bit biased. Last but not least, we can build models based text analysis to predict the users' preference. 
+
+# Analysis 2 - Exploring the Chicago Food Data
+
+## Abstract 
+
+Food quality has always been a public health issue and essential for determining a city's publicity. This dataset includes inspection data for different kinds of facilities types such as restaurants, schools, cafes, and etc. Lots of facilities in this dataset are under high risk which could affect public's health. For this analysis, we are interested in finding the inspection situation for restaurants and schools. We want to focus on these categories because people often go to restaurants and it is important to know the health situation of the restaurants across the city. The reason we pick schools is that the health of kids is essential to the society.  
+
+## Introduction 
+
+The Chicago Food Inspection data includes 187787 observations and 22 variables. Some important columns include risk levels, results, violations and zip zodes. We want to explore the inspection situation in both restaurants and schools. We cleaned the data and filtered out restaurant inspection data and school inspection data. 
+
+For the analysis, we are curious to know if these two categories are under high risks and their inspection results. We are also interested in knowing the top inspection types and top violation codes for each two facility type and if they have difference between each other. The problem we want to solve is to help these two types of facilities to better maintain their sanitary conditions. 
+
+## Analysis 
+
+```{r, include=FALSE}
+food = read_csv("https://uofi.box.com/shared/static/5637axblfhajotail80yw7j2s4r27hxd.csv")
+```
+
+```{r include=FALSE}
+library(RColorBrewer)
+library(ggthemes)
+library(caTools) 
+library(rpart)
+library(stringr)
+library(dplyr)
+```
+
+### Data 
+```{r cleaning the data and columns, include=FALSE}
+# cleaning data and columns
+names(food) = tolower(names(food))
+food_fin = select(food,-c(17, 18, 19, 20, 21, 22))
+colnames(food_fin)[which(names(food_fin) == "inspection id")] <- "id"
+colnames(food_fin)[which(names(food_fin) == "dba name")] <- "dba"
+colnames(food_fin)[which(names(food_fin) == "aka name")] <- "aka"
+colnames(food_fin)[which(names(food_fin) == "license #")] <- "license"
+colnames(food_fin)[which(names(food_fin) == "facility type")] <- "type"
+colnames(food_fin)[which(names(food_fin) == "inspection date")] <- "date"
+colnames(food_fin)[which(names(food_fin) == "inspection type")] <- "inspect_type"
+food_data = filter(
+  food_fin,
+  id != is.na(id),
+  dba != is.na(dba),
+  aka != is.na(aka),
+  license != 0,
+  type != is.na(type),
+  risk != is.na(risk), 
+  zip != is.na(zip),
+  inspect_type != is.na(inspect_type),
+  results != is.na(results),
+  violations != is.na(violations),
+  latitude != is.na(latitude),
+  longitude != is.na(longitude)
+)
+```
+
+```{r Restaurant data}
+# Filtering the facility type
+data_rest = filter(food_data, type == "Restaurant")
+```
+
+```{r school data}
+# Filtering the facility type to school 
+data_sch = filter(food_data, type == "School")
+```
+
+### Visualization 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+data_rest %>%
+  mutate(Risk = ifelse(risk == "Risk 1 (High)", "High risk", "Medium or low risk")) %>%
+  ggplot(aes(x = risk)) +
+  geom_bar(aes(fill = Risk)) +
+  scale_fill_manual(values = c('#CB4042', '#787D7B')) +
+  ggtitle("Restaurants Risks")
+
+data_rest %>%
+  mutate(Results = ifelse(results == "Pass", "Pass", "Fail or Pass w/ conditions")) %>%
+  ggplot(aes(x = results)) +
+  geom_bar(aes(fill = Results)) +
+  scale_fill_manual(values = c("#CB4042", "#86C166")) +
+  ggtitle("Inspection Results of Restaurants")
+```
+
+As the plots shown above, we can see the most restaurants are under **high** risk and about 60% of the restaurants **fully passed** the inspections. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+data_sch %>%
+  mutate(Risk = ifelse(risk == "Risk 1 (High)", "High risk", "Medium or low risk")) %>%
+  ggplot(aes(x = risk)) +
+  geom_bar(aes(fill = Risk)) +
+  scale_fill_manual(values = c('#CB4042', '#787D7B')) +
+  ggtitle("School Risks")
+
+data_sch %>%
+  mutate(Results = ifelse(results == "Pass", "Pass", "Fail or Pass w/ conditions")) %>%
+  ggplot(aes(x = results)) +
+  geom_bar(aes(fill = Results)) +
+  scale_fill_manual(values = c("#CB4042", "#86C166")) +
+  ggtitle("Inspection Results of Schools")
+```
+
+As the plots shown above, we can see that the number of schools is way smaller compared to the number of restaurants. A large amount of schools are under high risk yet about 70% of the schools **fully passed** the inspections
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+table <- sort(table(data_rest$inspect_type))
+table <- rev(table)[1:10]
+par(mar = c(15, 15, 1, 1))
+barplot( 
+  table,
+  las = 2,
+  col = "#FB966E",
+  main = "Top Inspection types of Restaurants",
+  horiz = TRUE,
+  xlim = c(0, 60000)
+)
+```
+
+As we can see here in the plot, the most frequent inspection type is regular inspection. Only a tiny portion of the restaurants were inspected due to tags remove. 
+
+```{r}
+rest_num = substr(data_rest$violations, start = 1, stop = 2)
+data_rest = cbind(rest_num, data_rest)
+table3 <- sort(table(data_rest$rest_num))
+table3 <- rev(table3)[1:10]
+barplot( 
+  table3,
+  las = 2,
+  col = "#B5CAA0",
+  main = "Top Violation Codes for Restaurants",
+  horiz = TRUE,
+  xlim = c(0, 20000)
+)
+
+```
+
+The most frequent violation that restaurant breaks is code 32th: *Food and non-food contact surfaces properly designed, constructed and maintained.* 
+The second most frequent violation code that restaurant breaks is code 33th: *Food and non-food contact equipment utensils clean, free of abrasive detergents.*
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+table2 <- sort(table(data_sch$inspect_type))
+table2 <- rev(table2)[1:10]
+par(mar = c(15, 15, 1, 1))
+barplot( 
+  table2,
+  las = 2,
+  col = "#F8C3CD",
+  main = "Top Inspection types of Schools",
+  horiz = TRUE,
+  xlim = c(0, 10000)
+)
+```
+
+The inspection types of schools are different from the inspection types of restaurants, Except for regular checking, a part of the schools were inspected because of complaints.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sch_num = substr(data_sch$violations, start = 1, stop = 2)
+data_sch = cbind(sch_num, data_sch)
+table4 <- sort(table(data_sch$sch_num))
+table4 <- rev(table4)[1:10]
+barplot( 
+  table4,
+  las = 2,
+  col = "#A8D8B9",
+  main = "Top Violation Codes for Schools",
+  horiz = TRUE,
+  xlim = c(0, 2000)
+)
+```
+
+The most frequent violation that school breaks is also code 32th: *Food and non-food contact surfaces properly designed, constructed and maintained.* The second most frequent violation is code 34th: *Floors: constructed per code, cleaned, good repair, coving installed, dust-less cleaning methods used.* 
+
+## Conclusion
+
+From the EDA Analysis above, we can conclude that most restaurants and schools that are under high risks passed the inspections eventually. The most frequent types of inspections for restaurants come from regular checking and customer complaints. Comparing to schools, restaurants have more complaints re-inspections. We can interpret that the school committee takes inspection and health issue more seriously so they have smaller distributions in complaints re-inspections. 
+
+Moreover, we found that both restaurants and schools break the code 32 most frequently. These types of facilities should pay special attention to their Food and non-food contact surfaces. To be more specific, restaurants should also keep their equipment clean and schools should keep their floors clean. 
